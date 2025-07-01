@@ -1,0 +1,40 @@
+module fir_filter (
+    input wire clk,
+    input wire rst,
+    input wire [7:0] x_in,           // 8-bit input sample
+    output reg [15:0] y_out          // 16-bit output
+);
+
+    // Coefficients (example: h = [1, 2, 3, 4])
+    parameter signed [7:0] h0 = 8'd1,
+                           h1 = 8'd2,
+                           h2 = 8'd3,
+                           h3 = 8'd4;
+
+    // Delay line to store past samples
+    reg [7:0] x_reg [0:3];  // x[n], x[n-1], x[n-2], x[n-3]
+
+    integer i;
+
+    // Sequential logic: shift register for samples
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            for (i = 0; i < 4; i = i + 1)
+                x_reg[i] <= 8'd0;
+        end else begin
+            x_reg[3] <= x_reg[2];
+            x_reg[2] <= x_reg[1];
+            x_reg[1] <= x_reg[0];
+            x_reg[0] <= x_in;
+        end
+    end
+
+    // Combinational logic: multiply-accumulate
+    always @(*) begin
+        y_out = (h0 * x_reg[0]) +
+                (h1 * x_reg[1]) +
+                (h2 * x_reg[2]) +
+                (h3 * x_reg[3]);
+    end
+
+endmodule
