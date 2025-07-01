@@ -1,0 +1,132 @@
+1.ALU MODULE:module alu (
+    input [7:0] a, b,
+    input [1:0] alu_ctrl,  // 00=ADD, 01=SUB
+    output reg [7:0] result
+);
+    always @(*) begin
+        case(alu_ctrl)
+            2'b00: result = a + b;
+            2'b01: result = a - b;
+            default: result = 8'b0;
+        endcase
+    end
+endmodule
+
+
+2.REGISTER FILE:
+module reg_file (
+    input clk, we,
+    input [2:0] rs1, rs2, rd,
+    input [7:0] wd,
+    output [7:0] rd1, rd2
+);
+    reg [7:0] regs [7:0];
+
+    assign rd1 = regs[rs1];
+    assign rd2 = regs[rs2];
+
+    always @(posedge clk) begin
+        if (we)
+            regs[rd] <= wd;
+    end
+endmodule
+
+3.DATA MEMORY:
+module data_mem (
+    input clk, we,
+    input [7:0] addr,
+    input [7:0] din,
+    output [7:0] dout
+);
+    reg [7:0] memory [255:0];
+
+    assign dout = memory[addr];
+
+    always @(posedge clk) begin
+        if (we)
+            memory[addr] <= din;
+    endmodule pipelined_cpu (
+    input clk,
+    output [7:0] reg_out  // Debug: show register 0
+);
+    // PC and Instruction Memory
+    reg [7:0] PC = 0;
+    reg [7:0] instr_mem [255:0];
+    wire [7:0] instr = instr_mem[PC];
+
+    // Pipeline registers
+    reg [7:0] IF_ID_instr;
+    reg [7:0] ID_EX_A, ID_EX_B, ID_EX_imm;
+    reg [2:0] ID_EX_rd;
+    reg [1:0] ID_EX_op;
+
+    reg [7:0] EX_MEM_result;
+    reg [2:0] EX_MEM_rd;
+    reg EX_MEM_write;
+
+    reg [7:0] MEM_WB_data;
+    reg [2:0] MEM_WB_rd;
+    reg MEM_WB_write;
+
+    // Register File
+    wire [7:0] reg_data1, reg_data2;
+    reg_file RF (
+        .clk(clk),
+        .we(MEM_WB_write),
+        .rs1(IF_ID_instr[5:3]),
+        .rs2(IF_ID_instr[2:0]),
+        .rd(MEM_WB_rd),
+        .wd(MEM_WB_data),
+        .rd1(reg_data1),
+        .rd2(reg_data2)
+    );
+
+    // ALU
+    wire [7:0] alu_result;
+    alu ALU (
+        .a(ID_EX_A),
+        .b(ID_EX_B),
+        .alu_ctrl(ID_EX_op),
+        .result(alu_result)
+    );
+
+    // Data memory
+    wire [7:0] mem_out;
+    data_mem DM (
+        .clk(clk),
+        .we(ID_EX_op == 2'b10), // Only LOAD for now
+        .addr(ID_EX_imm),
+        .din(8'b0),              // no store implemented
+        .dout(mem_out)
+    );
+
+    // Pipeline logic (simplified)
+    always @(posedge clk) begin
+        // IF stage
+        IF_ID_instr <= instr;
+        PC <= PC + 1;
+
+        // ID stage
+        ID_EX_op <= IF_ID_instr[7:6];
+        ID_EX_rd <= IF_ID_instr[5:3];
+        ID_EX_A <= reg_data1;
+        ID_EX_B <= reg_data2;
+        ID_EX_imm <= IF_ID_instr[2:0];
+
+        // EX stage
+        EX_MEM_result <= (ID_EX_op == 2'b10) ? mem_out : alu_result;
+        EX_MEM_rd <= ID_EX_rd;
+        EX_MEM_write <= 1;
+
+        // MEM/WB stage
+        MEM_WB_data <= EX_MEM_result;
+        MEM_WB_rd <= EX_MEM_rd;
+        MEM_WB_write <= EX_MEM_write;
+    end
+
+    assign reg_out = RF.regs[0]; // Output register 0 for testing
+endmodule
+
+endmodule
+
+4.MAIN PIPELINE MODULU:
